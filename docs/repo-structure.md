@@ -78,9 +78,10 @@ fieldsync/
 │
 ├─ deploy/
 │   ├─ Dockerfile                 # multi-stage: build stage (compilers, deps) → slim runtime stage, non-root user
-│   ├─ docker-compose.yml         # web · worker (realtime queue) · worker-reports · beat · db · redis · nginx
-│   ├─ docker-compose.prod.yml    # overrides: no live-reload, resource limits, restart policies
 │   └─ nginx.conf                 # TLS termination, proxy_pass + WS upgrade headers → web:8000
+│
+├─ docker-compose.yml             # web · worker (realtime queue) · worker-reports · beat · db · redis · nginx — run from repo root
+├─ docker-compose.prod.yml        # overrides: no live-reload, resource limits, restart policies
 │
 ├─ .github/
 │   └─ workflows/
