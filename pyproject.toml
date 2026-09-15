@@ -10,7 +10,10 @@ select = ["E", "F", "I", "UP", "B", "DJ"]
 python_version = "3.12"
 plugins = ["mypy_django_plugin.main"]
 strict = true
-exclude = ["migrations/"]
+# Tests are excluded from strict static typing (like migrations) — their
+# correctness is verified by actually running them, and factory_boy's
+# dynamic-attribute style fights strict mode for little real benefit.
+exclude = ["migrations/", "tests/"]
 
 [tool.django-stubs]
 django_settings_module = "config.settings.test"
