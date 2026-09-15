@@ -1,10 +1,28 @@
 from django.db import transaction
+from django.utils import timezone
 
 from apps.accounts.models import User
+from apps.common.realtime import send_to_group
+from apps.realtime.groups import job_group, org_group
 
 from .models import Job, JobEvent
 from .state_machine import JobStatus, validate_transition
 from .tasks import notify_status_change
+
+
+def _on_status_committed(job: Job) -> None:
+    """Fired once a status change has actually committed — never for a
+    transition that gets rolled back. Broadcasts to both groups that care
+    (docs/architecture.md #3) and schedules the notification task."""
+    payload = {
+        "job_id": str(job.pk),
+        "status": job.status,
+        "agent_id": str(job.agent_id) if job.agent_id else None,
+        "at": timezone.now().isoformat(),
+    }
+    send_to_group(org_group(job.organization_id), "job.update", payload)
+    send_to_group(job_group(job.pk), "job.update", payload)
+    notify_status_change.delay(str(job.pk))
 
 
 def assign(*, job: Job, agent: User, actor: User) -> Job:
@@ -21,7 +39,7 @@ def assign(*, job: Job, agent: User, actor: User) -> Job:
         JobEvent.objects.create(
             job=locked, from_status=from_status, to_status=JobStatus.ASSIGNED, actor=actor
         )
-        transaction.on_commit(lambda: notify_status_change.delay(str(locked.pk)))
+        transaction.on_commit(lambda: _on_status_committed(locked))
     return locked
 
 
@@ -38,5 +56,5 @@ def transition(*, job: Job, to_status: str, actor: User) -> Job:
         JobEvent.objects.create(
             job=locked, from_status=from_status, to_status=to_status, actor=actor
         )
-        transaction.on_commit(lambda: notify_status_change.delay(str(locked.pk)))
+        transaction.on_commit(lambda: _on_status_committed(locked))
     return locked

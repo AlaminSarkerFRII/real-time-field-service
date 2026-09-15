@@ -1,2 +1,1 @@
 -r base.txt
-uvicorn[standard]>=0.30

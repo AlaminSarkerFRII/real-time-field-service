@@ -41,7 +41,11 @@ services:
       context: .
       dockerfile: deploy/Dockerfile
       target: dev
-    command: python manage.py runserver 0.0.0.0:8000
+    # Django's runserver doesn't speak WebSocket on its own (that needs the
+    # daphne shim); uvicorn --reload is the same ASGI server prod uses,
+    # already a project dependency, so dev uses the real thing instead of a
+    # second ASGI server just for local convenience.
+    command: uvicorn config.asgi:application --host 0.0.0.0 --port 8000 --reload
     volumes:
       - .:/app
     ports:
