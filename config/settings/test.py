@@ -12,3 +12,9 @@ CELERY_TASK_EAGER_PROPAGATES = True
 CHANNEL_LAYERS = {
     "default": {"BACKEND": "channels.layers.InMemoryChannelLayer"},
 }
+
+# No collectstatic in tests either — same as dev. AUTOREFRESH defaults to
+# DEBUG (False here), which would make WhiteNoise eagerly scan STATIC_ROOT
+# at startup and warn since it doesn't exist; set explicitly instead.
+WHITENOISE_USE_FINDERS = True
+WHITENOISE_AUTOREFRESH = True
