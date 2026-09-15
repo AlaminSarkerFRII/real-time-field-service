@@ -1,3 +1,18 @@
+x-celery-common: &celery-common
+  build:
+    context: .
+    dockerfile: deploy/Dockerfile
+    target: dev
+  volumes:
+    - .:/app
+  env_file:
+    - .env
+  depends_on:
+    db:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+
 services:
   db:
     image: postgres:16
@@ -38,6 +53,18 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+
+  worker-realtime:
+    <<: *celery-common
+    command: celery -A config worker -l info -Q realtime -n realtime@%h
+
+  worker-reports:
+    <<: *celery-common
+    command: celery -A config worker -l info -Q reports -n reports@%h
+
+  beat:
+    <<: *celery-common
+    command: celery -A config beat -l info
 
 volumes:
   pgdata:

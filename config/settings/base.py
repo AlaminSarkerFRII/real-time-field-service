@@ -2,6 +2,7 @@ from datetime import timedelta
 from pathlib import Path
 
 import environ
+from celery.schedules import crontab
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
@@ -107,4 +108,38 @@ SIMPLE_JWT = {
     "ROTATE_REFRESH_TOKENS": True,
     "BLACKLIST_AFTER_ROTATION": True,
     "AUTH_HEADER_TYPES": ("Bearer",),
+}
+
+# Redis doubles as the Celery broker/result backend — accepted trade-off,
+# see docs/system-design.md #9 risk R-1.
+CELERY_BROKER_URL = env("REDIS_URL", default="redis://localhost:6379/0")
+CELERY_RESULT_BACKEND = env("REDIS_URL", default="redis://localhost:6379/0")
+CELERY_ACCEPT_CONTENT = ["json"]
+CELERY_TASK_SERIALIZER = "json"
+CELERY_RESULT_SERIALIZER = "json"
+CELERY_TIMEZONE = TIME_ZONE
+CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
+
+# Two queues, per docs/tech-stack.md's supporting-stack decision: a slow
+# nightly report can never delay a live notification.
+CELERY_TASK_ROUTES = {
+    "apps.jobs.tasks.notify_status_change": {"queue": "realtime"},
+    "apps.jobs.tasks.send_upcoming_reminders": {"queue": "realtime"},
+    "apps.jobs.tasks.expire_stale_locations": {"queue": "realtime"},
+    "apps.jobs.tasks.daily_ops_report": {"queue": "reports"},
+}
+
+CELERY_BEAT_SCHEDULE = {
+    "send-upcoming-reminders": {
+        "task": "apps.jobs.tasks.send_upcoming_reminders",
+        "schedule": crontab(minute="*/15"),
+    },
+    "expire-stale-locations": {
+        "task": "apps.jobs.tasks.expire_stale_locations",
+        "schedule": crontab(minute="*/2"),
+    },
+    "daily-ops-report": {
+        "task": "apps.jobs.tasks.daily_ops_report",
+        "schedule": crontab(hour=2, minute=0),
+    },
 }

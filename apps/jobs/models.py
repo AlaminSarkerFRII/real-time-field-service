@@ -95,3 +95,41 @@ class JobEvent(models.Model):
 
     def __str__(self) -> str:
         return f"{self.job_id}: {self.from_status or '∅'} -> {self.to_status}"
+
+
+class Notification(models.Model):
+    class Kind(models.TextChoices):
+        JOB_ASSIGNED = "job_assigned", "Job assigned"
+        JOB_EN_ROUTE = "job_en_route", "Agent en route"
+        JOB_ON_SITE = "job_on_site", "Agent on site"
+        JOB_COMPLETED = "job_completed", "Job completed"
+        JOB_CANCELLED = "job_cancelled", "Job cancelled"
+        UPCOMING_REMINDER = "upcoming_reminder", "Upcoming appointment reminder"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    recipient = models.ForeignKey(User, on_delete=models.CASCADE, related_name="notifications")
+    # Not in the original data-model.md sketch — added so a Celery retry (or a
+    # duplicate beat tick) can be idempotent per (job, kind, recipient)
+    # instead of re-sending. Nullable for a future notification that isn't
+    # about a specific job.
+    job = models.ForeignKey(
+        Job, on_delete=models.CASCADE, related_name="notifications", null=True, blank=True
+    )
+    kind = models.CharField(max_length=30, choices=Kind.choices)
+    title = models.CharField(max_length=200)
+    body = models.TextField()
+    read_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["job", "kind", "recipient"],
+                name="unique_notification_per_job_kind_recipient",
+            )
+        ]
+        indexes = [models.Index(fields=["recipient", "read_at"])]
+
+    def __str__(self) -> str:
+        return f"{self.kind} -> {self.recipient_id}"
