@@ -1,10 +1,12 @@
 import secrets
 import string
 import uuid
+from typing import Self
 
 from django.db import models
 
 from apps.accounts.models import Organization, User
+from apps.common.querysets import OrgScopedQuerySet
 
 from .state_machine import JobStatus
 
@@ -12,6 +14,21 @@ from .state_machine import JobStatus
 def default_reference() -> str:
     alphabet = string.ascii_uppercase + string.digits
     return "".join(secrets.choice(alphabet) for _ in range(8))
+
+
+class JobQuerySet(OrgScopedQuerySet["Job"]):
+    def visible_to(self, user: User) -> Self:
+        """Role-scoped per docs/architecture.md #5: dispatcher sees the whole
+        org, agent sees only their assigned jobs, customer sees only their
+        own. This is the one place that scoping is implemented."""
+        if user.is_superuser:
+            return self
+        qs = self.for_organization(user.organization_id)
+        if user.role == User.Role.AGENT:
+            return qs.filter(agent_id=user.id)
+        if user.role == User.Role.CUSTOMER:
+            return qs.filter(customer_id=user.id)
+        return qs
 
 
 class Job(models.Model):
@@ -44,6 +61,8 @@ class Job(models.Model):
     organization = models.ForeignKey(Organization, on_delete=models.PROTECT, related_name="jobs")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    objects = JobQuerySet.as_manager()
 
     class Meta:
         ordering = ["-created_at"]
